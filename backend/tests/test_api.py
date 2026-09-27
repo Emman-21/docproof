@@ -384,6 +384,71 @@ def test_approve_persists_across_requests():
 
 
 # ---------------------------------------------------------------------------
+# POST /reverify/{id}
+# ---------------------------------------------------------------------------
+
+def test_reverify_nonexistent_contract_returns_404():
+    response = client.post("/reverify/NONEXISTENT")
+
+    assert response.status_code == 404
+
+
+def test_reverify_pending_contract_returns_409():
+    response = client.post("/reverify/DP-001")
+
+    assert response.status_code == 409
+
+
+def test_reverify_rejected_contract_returns_409():
+    reject_response = client.post("/reject/DP-001")
+
+    assert reject_response.status_code == 200
+
+    response = client.post("/reverify/DP-001")
+
+    assert response.status_code == 409
+
+
+def test_reverify_approved_verified_contract_accepts_request():
+    sample_repo = Path(__file__).resolve().parents[2] / "sample_repo"
+
+    verify_response = client.post(
+        "/verify",
+        json={
+            "repository": str(sample_repo),
+            "branch": "main",
+            "documentation": ["README.md"],
+        },
+    )
+
+    assert verify_response.status_code == 200
+
+    fixes = verify_response.json()["fixes"]
+
+    assert len(fixes) > 0
+
+    contract_id = fixes[0]["contract_id"]
+
+    approve_response = client.post(
+        f"/approve/{contract_id}"
+    )
+
+    assert approve_response.status_code == 200
+
+    response = client.post(
+        f"/reverify/{contract_id}"
+    )
+
+    assert response.status_code == 200
+
+    body = response.json()
+
+    assert body["contract_id"] == contract_id
+    assert body["approvalStatus"] == "approved"
+    assert body["approved"] is True
+
+
+# ---------------------------------------------------------------------------
 # POST /reject/{id}
 # ---------------------------------------------------------------------------
 
