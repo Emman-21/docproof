@@ -59,6 +59,9 @@ class TestPipelineResultSchema:
     def test_has_trust_score(self, pipeline_result):
         assert isinstance(pipeline_result.trust_score, float)
 
+    def test_has_trust_score_after(self, pipeline_result):
+        assert isinstance(pipeline_result.trust_score_after, float)
+
     def test_has_elapsed_seconds(self, pipeline_result):
         assert isinstance(pipeline_result.elapsed_seconds, float)
 
@@ -72,7 +75,7 @@ class TestPipelineResultSchema:
     def test_all_required_keys_present(self, pipeline_result):
         keys = set(pipeline_result.model_dump().keys())
         assert {"contracts", "fixes", "reverification", "summary",
-                "trust_score", "elapsed_seconds"}.issubset(keys)
+                "trust_score", "trust_score_after", "elapsed_seconds"}.issubset(keys)
 
 
 # ---------------------------------------------------------------------------
@@ -178,6 +181,13 @@ class TestTrustScore:
         has_fail = any(c.status == "fail" for c in pipeline_result.contracts)
         if has_fail:
             assert pipeline_result.trust_score < 100.0
+
+    def test_trust_score_after_in_range(self, pipeline_result):
+        assert 0.0 <= pipeline_result.trust_score_after <= 100.0
+
+    def test_trust_score_after_gte_trust_score(self, pipeline_result):
+        """Applying fixes should not decrease the trust score."""
+        assert pipeline_result.trust_score_after >= pipeline_result.trust_score
 
 
 # ---------------------------------------------------------------------------
@@ -309,6 +319,7 @@ class TestRunAndDump:
         assert "reverification" in parsed
         assert "summary" in parsed
         assert "trust_score" in parsed
+        assert "trust_score_after" in parsed
         assert "elapsed_seconds" in parsed
 
     def test_indent_respected(self):
