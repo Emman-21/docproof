@@ -101,7 +101,7 @@ def _parse_env_example(repo: Path) -> dict[str, str]:
         return {}
     result: dict[str, str] = {}
     try:
-        text = env_file.read_text(encoding="utf-8")
+        text = env_file.read_text(encoding="utf-8", errors="replace")
     except OSError:
         return {}
     for line in text.splitlines():
@@ -149,7 +149,7 @@ def _scan_docs(repo: Path) -> dict[str, tuple[str, int]]:
     found: dict[str, tuple[str, int]] = {}
     for doc_file in _find_doc_files(repo):
         try:
-            text = doc_file.read_text(encoding="utf-8")
+            text = doc_file.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
         rel = str(doc_file.relative_to(repo))
@@ -215,7 +215,7 @@ def _scan_source(repo: Path) -> dict[str, tuple[str, int, str]]:
     for src_file in _collect_source_files(repo):
         suffix = src_file.suffix.lower()
         try:
-            text = src_file.read_text(encoding="utf-8")
+            text = src_file.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
         rel = str(src_file.relative_to(repo))

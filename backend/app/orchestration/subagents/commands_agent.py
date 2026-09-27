@@ -198,7 +198,7 @@ def _validate_npm_command(cmd: str, repo: Path) -> _ValidationResult:
         )
 
     try:
-        pkg = json.loads(pkg_path.read_text(encoding="utf-8"))
+        pkg = json.loads(pkg_path.read_text(encoding="utf-8", errors="replace"))
     except (json.JSONDecodeError, OSError) as exc:
         return _ValidationResult(
             status="warning",
@@ -325,7 +325,7 @@ def _validate_pip_command(cmd: str, repo: Path) -> _ValidationResult:
     if req_file:
         req_path = repo / req_file
         if req_path.is_file():
-            snippet_lines = req_path.read_text(encoding="utf-8").splitlines()
+            snippet_lines = req_path.read_text(encoding="utf-8", errors="replace").splitlines()
             # Show up to first 5 non-comment, non-empty lines
             deps = [ln for ln in snippet_lines if ln.strip() and not ln.strip().startswith("#")][:5]
             snippet = "\n".join(deps)
@@ -620,7 +620,7 @@ def run(repo_path: str | Path) -> list[DocumentationContract]:
 
     for doc_file in doc_files:
         try:
-            text = doc_file.read_text(encoding="utf-8")
+            text = doc_file.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
 

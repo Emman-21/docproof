@@ -34,7 +34,8 @@ _DOC_PATTERNS: list[tuple[str, re.Pattern[str], str]] = [
     (
         "node",
         re.compile(
-            r"Node\.js\s+(\d+(?:\.\d+)*)\+",
+            # Matches: "Node.js 18+", "Node.js >= 18", "Node 18+", "node 18.x", ">=18.0.0"
+            r"Node(?:\.js)?\s*(?:>=?|v)?\s*(\d+(?:\.\d+)*)[+x]?",
             re.IGNORECASE,
         ),
         "Node.js >=",
@@ -42,7 +43,7 @@ _DOC_PATTERNS: list[tuple[str, re.Pattern[str], str]] = [
     (
         "npm",
         re.compile(
-            r"npm\s+(\d+(?:\.\d+)*)\+",
+            r"npm\s*(?:>=?)?\s*(\d+(?:\.\d+)*)\+?",
             re.IGNORECASE,
         ),
         "npm >=",
@@ -50,7 +51,7 @@ _DOC_PATTERNS: list[tuple[str, re.Pattern[str], str]] = [
     (
         "python",
         re.compile(
-            r"Python\s+(\d+\.\d+)\+",
+            r"Python\s*(?:>=?)?\s*(\d+\.\d+)\+?",
             re.IGNORECASE,
         ),
         "Python >=",
@@ -97,7 +98,7 @@ def _read_package_json(repo: Path) -> dict:
     if not pkg.is_file():
         return {}
     try:
-        return json.loads(pkg.read_text(encoding="utf-8"))
+        return json.loads(pkg.read_text(encoding="utf-8", errors="replace"))
     except (json.JSONDecodeError, OSError):
         return {}
 
@@ -107,7 +108,7 @@ def _read_nvmrc(repo: Path) -> Optional[str]:
     nvmrc = repo / ".nvmrc"
     if not nvmrc.is_file():
         return None
-    return nvmrc.read_text(encoding="utf-8").strip().lstrip("v")
+    return nvmrc.read_text(encoding="utf-8", errors="replace").strip().lstrip("v")
 
 
 def _read_python_version_file(repo: Path) -> Optional[str]:
@@ -115,7 +116,7 @@ def _read_python_version_file(repo: Path) -> Optional[str]:
     pv = repo / ".python-version"
     if not pv.is_file():
         return None
-    return pv.read_text(encoding="utf-8").strip().lstrip("v")
+    return pv.read_text(encoding="utf-8", errors="replace").strip().lstrip("v")
 
 
 def _read_setup_cfg_python_requires(repo: Path) -> Optional[str]:
@@ -338,7 +339,7 @@ def run(repo_path: str | Path) -> list[DocumentationContract]:
 
     for doc_file in doc_files:
         try:
-            text = doc_file.read_text(encoding="utf-8")
+            text = doc_file.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
 

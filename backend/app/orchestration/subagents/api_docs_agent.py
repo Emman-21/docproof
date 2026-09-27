@@ -210,7 +210,7 @@ def _scan_docs(repo: Path) -> list[_DocEndpoint]:
     result: list[_DocEndpoint] = []
     for doc_file in _find_doc_files(repo):
         try:
-            text = doc_file.read_text(encoding="utf-8")
+            text = doc_file.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
         rel = str(doc_file.relative_to(repo))
@@ -228,7 +228,7 @@ def _scan_impl(backend: Path) -> list[_ImplEndpoint]:
     result: list[_ImplEndpoint] = []
     for py_file in _find_python_files(backend):
         try:
-            text = py_file.read_text(encoding="utf-8")
+            text = py_file.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
         rel = str(py_file.relative_to(backend))

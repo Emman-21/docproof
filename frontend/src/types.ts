@@ -63,3 +63,15 @@ export interface ContractFilters {
   area: 'all' | VerificationArea;
   source: 'all' | string;
 }
+
+export type PatchType = 'doc_edit' | 'config_edit' | 'code_edit';
+
+export interface FixSuggestion {
+  contract_id: string;
+  area: VerificationArea;
+  patch_type: PatchType;
+  target_file: string;
+  description: string;
+  diff: string;
+  raw_fix: string;
+}

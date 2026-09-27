@@ -17,9 +17,9 @@ The reset() function restores the full original seed, not just clears the store.
 from __future__ import annotations
 
 import copy
-from typing import Dict, List
+from typing import Dict, List, Optional
 
-from app.core.models import DocumentationContract
+from app.core.models import DocumentationContract, FixSuggestion
 
 # ---------------------------------------------------------------------------
 # Seed data (mirrors frontend/src/data/mockData.ts)
@@ -223,16 +223,28 @@ _SEED: List[DocumentationContract] = [
 # ---------------------------------------------------------------------------
 
 _contracts: Dict[str, DocumentationContract] = {}
+_fixes: List[FixSuggestion] = []
+_trust_score_after: Optional[float] = None
 
 
 def reset() -> None:
-    """Restore the store to the original seed dataset.
-
-    Called at application startup and by the test fixture before each test.
-    Uses deep copies so mutations during a test never corrupt the seed.
-    """
-    global _contracts
+    """Restore the store to the original seed dataset."""
+    global _contracts, _fixes, _trust_score_after
     _contracts = {c.id: c.model_copy(deep=True) for c in _SEED}
+    _fixes = []
+    _trust_score_after = None
+
+
+def reset_with(
+    contracts: List[DocumentationContract],
+    fixes: Optional[List[FixSuggestion]] = None,
+    trust_score_after: Optional[float] = None,
+) -> None:
+    """Replace the store with results from a real pipeline run."""
+    global _contracts, _fixes, _trust_score_after
+    _contracts = {c.id: c.model_copy(deep=True) for c in contracts}
+    _fixes = list(fixes) if fixes else []
+    _trust_score_after = trust_score_after
 
 
 def all_contracts() -> List[DocumentationContract]:
@@ -250,6 +262,14 @@ def update_contract(contract_id: str, **fields) -> DocumentationContract | None:
     updated = contract.model_copy(update=fields)
     _contracts[contract_id] = updated
     return updated
+
+
+def all_fixes() -> List[FixSuggestion]:
+    return list(_fixes)
+
+
+def get_trust_score_after() -> Optional[float]:
+    return _trust_score_after
 
 
 # Seed on module import so the app is ready without an explicit startup call.

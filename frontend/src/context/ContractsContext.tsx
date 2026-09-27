@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -11,9 +12,18 @@ import {
   DEFAULT_DOCUMENTATION,
   DEMO_REPOSITORY,
 } from '../constants';
-import { initialContracts, initialHistory } from '../data/mockData';
+import {
+  approveFix,
+  getContracts,
+  getFixes,
+  getVerifyStatus,
+  rejectFix,
+  reverifyContract,
+  triggerVerification,
+} from '../api/client';
 import type {
   DocumentationContract,
+  FixSuggestion,
   ProjectSelection,
   VerificationRun,
   VerificationSummary,
@@ -32,6 +42,9 @@ type VerificationMode = 'idle' | 'running' | 'complete' | 'error';
 
 interface ContractsContextValue {
   contracts: DocumentationContract[];
+  fixes: FixSuggestion[];
+  trustScoreAfter: number | null;
+  verifyError: string;
   project: ProjectSelection;
   history: VerificationRun[];
   verificationMode: VerificationMode;
@@ -58,12 +71,47 @@ const ContractsContext = createContext<ContractsContextValue | undefined>(undefi
 const defaultProject: ProjectSelection = createFreshProjectSelection(DEFAULT_BRANCH, DEFAULT_DOCUMENTATION);
 
 export function ContractsProvider({ children }: { children: ReactNode }) {
-  const [contracts, setContracts] = useState<DocumentationContract[]>(initialContracts);
+  const [contracts, setContracts] = useState<DocumentationContract[]>([]);
+  const [fixes, setFixes] = useState<FixSuggestion[]>([]);
+  const [trustScoreAfter, setTrustScoreAfter] = useState<number | null>(null);
+  const [verifyError, setVerifyError] = useState('');
   const [project, setProject] = useState<ProjectSelection>(defaultProject);
-  const [history, setHistory] = useState<VerificationRun[]>(initialHistory);
+  const [history, setHistory] = useState<VerificationRun[]>([]);
   const [verificationMode, setVerificationMode] = useState<VerificationMode>('idle');
-  const [previousScore, setPreviousScore] = useState(72);
+  const [previousScore, setPreviousScore] = useState(0);
   const [lastVerifiedLabel, setLastVerifiedLabel] = useState('Not verified yet');
+
+  // On mount: restore project from sessionStorage, then fetch live contracts
+  // and verification status from the backend.
+  useEffect(() => {
+    // Restore project so the topbar still shows repo/branch after a refresh
+    const saved = sessionStorage.getItem('docproof_project');
+    if (saved) {
+      try { setProject(JSON.parse(saved)); } catch { /* ignore */ }
+    }
+
+    // Fetch current contracts from backend
+    getContracts()
+      .then((data) => {
+        if (data.length > 0) setContracts(data);
+      })
+      .catch(() => {});
+
+    // If backend is still running a pipeline, resume polling
+    getVerifyStatus()
+      .then(({ status }) => {
+        if (status === 'running') setVerificationMode('running');
+        if (status === 'complete') setVerificationMode('complete');
+      })
+      .catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Persist project to sessionStorage whenever it changes
+  useEffect(() => {
+    if (project.repository) {
+      sessionStorage.setItem('docproof_project', JSON.stringify(project));
+    }
+  }, [project]);
 
   const summary = useMemo(() => computeSummary(contracts), [contracts]);
   const score = useMemo(() => computeTrustScore(contracts), [contracts]);
@@ -81,37 +129,102 @@ export function ContractsProvider({ children }: { children: ReactNode }) {
     setVerificationMode('running');
   }, []);
 
+  // Called by VerificationRunning once the progress animation finishes.
+  // Kicks off POST /verify, then polls GET /verify/status until complete,
+  // then fetches the fresh contracts from the backend.
   const finishVerification = useCallback(() => {
-    setVerificationMode('complete');
-    setLastVerifiedLabel('Just now');
-    const run = createCurrentHistoryRun(contracts, project.branch || DEFAULT_BRANCH, 'demo-verify', 'Just now');
-    setHistory((current) => [run, ...current.map((item) => ({ ...item, current: false }))]);
-  }, [contracts, project.branch]);
+    triggerVerification(project)
+      .then(() => {
+        // Poll every 2 s until backend reports complete or error
+        const poll = window.setInterval(() => {
+          getVerifyStatus()
+            .then(({ status, error, trust_score_after }) => {
+              if (status === 'complete') {
+                window.clearInterval(poll);
+                setTrustScoreAfter(trust_score_after);
+                return Promise.all([getContracts(), getFixes()]).then(([data, fixData]) => {
+                  setContracts(data);
+                  setFixes(fixData);
+                  setVerificationMode('complete');
+                  setLastVerifiedLabel('Just now');
+                  const run = createCurrentHistoryRun(data, project.branch || DEFAULT_BRANCH, 'api-verify', 'Just now');
+                  setHistory((current) => [run, ...current.map((item) => ({ ...item, current: false }))]);
+                });
+              }
+              if (status === 'error') {
+                window.clearInterval(poll);
+                setVerifyError(error || 'Verification failed.');
+                setVerificationMode('error');
+              }
+            })
+            .catch(() => {
+              window.clearInterval(poll);
+              setVerificationMode('error');
+            });
+        }, 2000);
+      })
+      .catch(() => {
+        setVerificationMode('error');
+      });
+  }, [project]);
 
   const failVerification = useCallback(() => {
     setVerificationMode('error');
   }, []);
 
   const approveContract = useCallback((contractId: string) => {
-    setContracts((current) => current.map((contract) => (
-      contract.id === contractId
-        ? { ...contract, approvalStatus: 'approved', approved: true, reverified: false }
-        : contract
-    )));
+    approveFix(contractId)
+      .then((updated) => {
+        setContracts((current) =>
+          current.map((contract) => (contract.id === contractId ? updated : contract)),
+        );
+      })
+      .catch(() => {
+        // optimistic fallback — mark locally if API failed
+        setContracts((current) =>
+          current.map((contract) =>
+            contract.id === contractId
+              ? { ...contract, approvalStatus: 'approved', approved: true, reverified: false }
+              : contract,
+          ),
+        );
+      });
   }, []);
 
   const rejectContract = useCallback((contractId: string) => {
-    setContracts((current) => applyRejectedFix(current, contractId));
+    rejectFix(contractId)
+      .then((updated) => {
+        setContracts((current) =>
+          current.map((contract) => (contract.id === contractId ? updated : contract)),
+        );
+      })
+      .catch(() => {
+        setContracts((current) => applyRejectedFix(current, contractId));
+      });
   }, []);
 
   const completeReverification = useCallback((contractId: string) => {
     const beforeScore = computeTrustScore(contracts);
-    const updated = applyApprovedFix(contracts, contractId);
-    const run = createCurrentHistoryRun(updated, project.branch || DEFAULT_BRANCH, 'demo-fix', 'Just now');
-    setPreviousScore(beforeScore);
-    setContracts(updated);
-    setHistory((historyCurrent) => [run, ...historyCurrent.map((item) => ({ ...item, current: false }))]);
-    setLastVerifiedLabel('Just now');
+    reverifyContract(contractId)
+      .then((updatedContract) => {
+        setContracts((current) => {
+          const next = current.map((c) => (c.id === contractId ? updatedContract : c));
+          const run = createCurrentHistoryRun(next, project.branch || DEFAULT_BRANCH, 'api-fix', 'Just now');
+          setHistory((h) => [run, ...h.map((item) => ({ ...item, current: false }))]);
+          return next;
+        });
+        setPreviousScore(beforeScore);
+        setLastVerifiedLabel('Just now');
+      })
+      .catch(() => {
+        // Fallback: apply locally if API unreachable
+        const updated = applyApprovedFix(contracts, contractId);
+        const run = createCurrentHistoryRun(updated, project.branch || DEFAULT_BRANCH, 'api-fix', 'Just now');
+        setPreviousScore(beforeScore);
+        setContracts(updated);
+        setHistory((h) => [run, ...h.map((item) => ({ ...item, current: false }))]);
+        setLastVerifiedLabel('Just now');
+      });
   }, [contracts, project.branch]);
 
   const getContract = useCallback(
@@ -119,21 +232,26 @@ export function ContractsProvider({ children }: { children: ReactNode }) {
     [contracts],
   );
 
-
   const startNewRepository = useCallback(() => {
-    setContracts(initialContracts);
+    setContracts([]);
     setHistory([]);
     setVerificationMode('idle');
-    setPreviousScore(computeTrustScore(initialContracts));
+    setPreviousScore(0);
     setLastVerifiedLabel('Not verified yet');
     setProject(createFreshProjectSelection(DEFAULT_BRANCH, DEFAULT_DOCUMENTATION));
+    sessionStorage.removeItem('docproof_project');
   }, []);
 
   const resetDemo = useCallback(() => {
-    setContracts(initialContracts);
-    setHistory(initialHistory);
+    // Re-fetch from backend so we get the current seed state
+    getContracts()
+      .then((data) => {
+        setContracts(data);
+        setPreviousScore(computeTrustScore(data));
+      })
+      .catch(() => {});
+    setHistory([]);
     setVerificationMode('idle');
-    setPreviousScore(72);
     setLastVerifiedLabel('Not verified yet');
     setProject({
       repository: DEMO_REPOSITORY,
@@ -144,6 +262,9 @@ export function ContractsProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<ContractsContextValue>(() => ({
     contracts,
+    fixes,
+    trustScoreAfter,
+    verifyError,
     project,
     history,
     verificationMode,
@@ -165,6 +286,9 @@ export function ContractsProvider({ children }: { children: ReactNode }) {
     startNewRepository,
   }), [
     contracts,
+    fixes,
+    trustScoreAfter,
+    verifyError,
     project,
     history,
     verificationMode,
