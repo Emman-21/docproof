@@ -1,12 +1,19 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 
+from app.fixes.approval_flow import (
+    FixApplicationError,
+    apply_fix,
+    rollback_fix,
+)
+from app.orchestration.pipeline import (
+    run as run_orchestration_pipeline,
+)
 from app.storage import repository
 from app.verification.trust_score import calculate_trust_score
-import app.orchestration.subagents.reverification_agent as reverification_agent
 
 
 router = APIRouter()
@@ -14,16 +21,10 @@ router = APIRouter()
 
 @router.post("/reverify/{contract_id}")
 def reverify_contract(contract_id: str) -> dict:
-    """Reverify one previously approved documentation fix.
-
-    The endpoint only allows contracts explicitly approved by the user.
-    It retrieves the stored FixSuggestion and verification context from
-    the most recent verification run, then invokes the reverification
-    agent for that approved fix.
-    """
+    """Apply one approved fix and verify the real changed repository."""
 
     # ------------------------------------------------------------
-    # Contract must exist
+    # 1. Contract must exist
     # ------------------------------------------------------------
 
     contract = repository.get_contract(contract_id)
@@ -35,7 +36,7 @@ def reverify_contract(contract_id: str) -> dict:
         )
 
     # ------------------------------------------------------------
-    # Human approval is required
+    # 2. Human approval is required
     # ------------------------------------------------------------
 
     if (
@@ -51,7 +52,7 @@ def reverify_contract(contract_id: str) -> dict:
         )
 
     # ------------------------------------------------------------
-    # Retrieve the exact generated fix
+    # 3. Retrieve exact approved fix
     # ------------------------------------------------------------
 
     fix = repository.get_fix(contract_id)
@@ -66,7 +67,7 @@ def reverify_contract(contract_id: str) -> dict:
         )
 
     # ------------------------------------------------------------
-    # Retrieve repository context
+    # 4. Retrieve repository context
     # ------------------------------------------------------------
 
     context = repository.get_verification_context()
@@ -76,7 +77,7 @@ def reverify_contract(contract_id: str) -> dict:
             status_code=409,
             detail=(
                 "No verification context exists. "
-                "Run verification before reverifying."
+                "Run verification first."
             ),
         )
 
@@ -93,60 +94,182 @@ def reverify_contract(contract_id: str) -> dict:
             ),
         )
 
+    backend_path = (
+        Path(context.backend_path).resolve()
+        if context.backend_path
+        else None
+    )
+
     # ------------------------------------------------------------
-    # Run reverification using ONLY the approved fix
+    # 5. Record trust score BEFORE modifying files
     # ------------------------------------------------------------
 
     current_contracts = repository.get_all_contracts()
 
-    result = reverification_agent.run(
-        approved_fixes=[fix],
-        contracts=current_contracts,
-        repo_path=repository_path,
+    trust_score_before = calculate_trust_score(
+        current_contracts
     )
 
     # ------------------------------------------------------------
-    # Persist post-reverification contracts
+    # 6. Physically apply the approved fix
     # ------------------------------------------------------------
 
-    repository.replace_contracts(
-        result.contracts
-    )
+    try:
+        applied_fix = apply_fix(
+            repository_path,
+            fix,
+        )
 
-    updated_contract = repository.get_contract(
-        contract_id
-    )
+    except FixApplicationError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=str(exc),
+        ) from exc
 
-    if updated_contract is None:
+    # ------------------------------------------------------------
+    # 7. Fresh verification from the changed filesystem
+    # ------------------------------------------------------------
+
+    try:
+        fresh_result = run_orchestration_pipeline(
+            repo_path=repository_path,
+            backend_path=backend_path,
+        )
+
+    except Exception as exc:
+        rollback_fix(applied_fix)
+
         raise HTTPException(
             status_code=500,
             detail=(
-                "Reverification completed but the target "
-                "contract could not be recovered."
+                "Fresh verification failed. "
+                "The file change was rolled back."
             ),
-        )
+        ) from exc
 
-    updated_trust_score = calculate_trust_score(
-        result.contracts
+    fresh_contracts = fresh_result.contracts
+    trust_score_after = fresh_result.trust_score
+
+    # ------------------------------------------------------------
+    # 8. Check whether the original issue still fails
+    #
+    # Contract IDs may change after editing the claim text,
+    # so compare the verification area + source location.
+    # ------------------------------------------------------------
+
+    same_location = [
+        candidate
+        for candidate in fresh_contracts
+        if (
+            candidate.area == contract.area
+            and candidate.source == contract.source
+        )
+    ]
+
+    still_failing = any(
+        candidate.status in {"fail", "warning"}
+        for candidate in same_location
+    )
+
+    score_regressed = (
+        trust_score_after < trust_score_before
     )
 
     # ------------------------------------------------------------
-    # Return useful frontend result
+    # 9. Roll back if real verification rejects the edit
+    # ------------------------------------------------------------
+
+    if still_failing or score_regressed:
+        rollback_fix(applied_fix)
+
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "The approved fix did not pass fresh verification. "
+                "The file change was rolled back."
+            ),
+        )
+
+    # ------------------------------------------------------------
+    # 10. Mark the freshly verified equivalent contract
+    #
+    # The ID may be different because claim text changed.
+    # ------------------------------------------------------------
+
+    persisted_contracts = []
+
+    for candidate in fresh_contracts:
+        if (
+            candidate.area == contract.area
+            and candidate.source == contract.source
+            and candidate.status == "pass"
+        ):
+            candidate = candidate.model_copy(
+                update={
+                    "approvalStatus": "approved",
+                    "approved": True,
+                    "reverified": True,
+                }
+            )
+
+        persisted_contracts.append(candidate)
+
+    # ------------------------------------------------------------
+    # 11. Persist REAL post-edit results
+    # ------------------------------------------------------------
+
+    repository.replace_contracts(
+        persisted_contracts
+    )
+
+    repository.replace_fixes(
+        fresh_result.fixes
+    )
+
+    # ------------------------------------------------------------
+    # 12. Build evidence
+    # ------------------------------------------------------------
+
+    verified_match = next(
+        (
+            candidate
+            for candidate in persisted_contracts
+            if (
+                candidate.area == contract.area
+                and candidate.source == contract.source
+                and candidate.status == "pass"
+            )
+        ),
+        None,
+    )
+
+    if verified_match is not None:
+        evidence = verified_match.evidence
+        resulting_status = verified_match.status
+    else:
+        evidence = (
+            f"Approved fix was written to {fix.target_file}. "
+            "Fresh verification no longer reports the "
+            "original discrepancy."
+        )
+        resulting_status = "pass"
+
+    # ------------------------------------------------------------
+    # 13. Return real verification result
     # ------------------------------------------------------------
 
     return {
-        "contract_id": updated_contract.id,
-        "status": updated_contract.status,
-        "approvalStatus": (
-            updated_contract.approvalStatus
-        ),
-        "approved": updated_contract.approved,
-        "reverified": updated_contract.reverified,
-        "evidence": updated_contract.evidence,
-        "summary": result.summary.model_dump(),
-        "trust_score": updated_trust_score,
-        "applied_fix_count": (
-            result.applied_fix_count
-        ),
-        "all_pass": result.all_pass,
+        "contract_id": contract_id,
+        "status": resulting_status,
+        "approvalStatus": "approved",
+        "approved": True,
+        "reverified": True,
+        "verified_from_disk": True,
+        "file_changed": applied_fix.changed,
+        "target_file": fix.target_file,
+        "evidence": evidence,
+        "summary": fresh_result.summary.model_dump(),
+        "trust_score_before": trust_score_before,
+        "trust_score": trust_score_after,
+        "applied_fix_count": 1,
     }

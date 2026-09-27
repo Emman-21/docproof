@@ -409,8 +409,30 @@ def test_reverify_rejected_contract_returns_409():
     assert response.status_code == 409
 
 
-def test_reverify_approved_verified_contract_accepts_request():
-    sample_repo = Path(__file__).resolve().parents[2] / "sample_repo"
+def test_reverify_approved_verified_contract_accepts_request(
+    tmp_path: Path,
+):
+    import shutil
+
+    source_root = Path(__file__).resolve().parents[2]
+
+    source_sample = source_root / "sample_repo"
+    source_backend = source_root / "backend"
+
+    workspace = tmp_path / "workspace"
+
+    sample_repo = workspace / "sample_repo"
+    backend_copy = workspace / "backend"
+
+    shutil.copytree(
+        source_sample,
+        sample_repo,
+    )
+
+    shutil.copytree(
+        source_backend / "app",
+        backend_copy / "app",
+    )
 
     verify_response = client.post(
         "/verify",
@@ -427,7 +449,18 @@ def test_reverify_approved_verified_contract_accepts_request():
 
     assert len(fixes) > 0
 
-    contract_id = fixes[0]["contract_id"]
+    selected_fix = fixes[0]
+
+    contract_id = selected_fix["contract_id"]
+
+    target_file = (
+        sample_repo
+        / selected_fix["target_file"]
+    )
+
+    before_content = target_file.read_text(
+        encoding="utf-8"
+    )
 
     approve_response = client.post(
         f"/approve/{contract_id}"
@@ -446,6 +479,15 @@ def test_reverify_approved_verified_contract_accepts_request():
     assert body["contract_id"] == contract_id
     assert body["approvalStatus"] == "approved"
     assert body["approved"] is True
+    assert body["reverified"] is True
+    assert body["verified_from_disk"] is True
+    assert body["file_changed"] is True
+
+    after_content = target_file.read_text(
+        encoding="utf-8"
+    )
+
+    assert after_content != before_content
 
 
 # ---------------------------------------------------------------------------
