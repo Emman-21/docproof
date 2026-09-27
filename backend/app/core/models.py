@@ -24,6 +24,8 @@ VerificationArea = Literal[
     "api_docs",
 ]
 
+PatchType = Literal["doc_edit", "config_edit", "code_edit"]
+
 ContractResultStatus = Literal["pass", "fail", "warning"]
 
 ApprovalStatus = Literal["pending", "approved", "rejected"]
@@ -57,6 +59,30 @@ class DocumentationContract(BaseModel):
     approved: bool
     reverified: bool
     severity: Optional[Severity] = None
+
+
+# ---------------------------------------------------------------------------
+# Fix suggestion model
+# ---------------------------------------------------------------------------
+
+class FixSuggestion(BaseModel):
+    """A structured, actionable fix for a single failing DocumentationContract.
+
+    ``diff`` contains a unified-diff fragment that a developer can apply
+    directly (or review) to resolve the discrepancy detected by the
+    verification agent.  ``raw_fix`` holds the same information as plain text
+    for consumers that do not want to parse diffs.
+    """
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    contract_id: str
+    area: VerificationArea
+    patch_type: PatchType
+    target_file: str
+    description: str
+    diff: str
+    raw_fix: str
 
 
 # ---------------------------------------------------------------------------

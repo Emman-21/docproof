@@ -198,35 +198,49 @@ def test_verify_local_sample_repo_returns_completed_results():
         "documentation": ["README.md"],
     }
 
-    r = client.post("/verify", json=payload)
+    response = client.post("/verify", json=payload)
 
-    assert r.status_code == 200
+    assert response.status_code == 200
 
-    body = r.json()
+    body = response.json()
 
     assert body["status"] == "completed"
-    assert body["trust_score"] == 75.0
 
-    assert body["summary"] == {
-        "total": 4,
-        "passed": 3,
-        "failed": 1,
-        "warnings": 0,
+    contracts = body["contracts"]
+
+    assert len(contracts) > 0
+
+    assert {
+        contract["area"]
+        for contract in contracts
+    } == {
+        "runtime_requirements",
+        "commands",
+        "config_env",
+        "api_docs",
     }
 
-    assert len(body["contracts"]) == 4
+    assert body["summary"]["total"] == len(contracts)
 
-    contracts = {
-        contract["expected"]: contract
-        for contract in body["contracts"]
-    }
+    assert (
+        body["summary"]["passed"]
+        + body["summary"]["failed"]
+        + body["summary"]["warnings"]
+        == body["summary"]["total"]
+    )
 
-    assert contracts["PORT=3000"]["status"] == "pass"
-    assert contracts["DEBUG=false"]["status"] == "pass"
-    assert contracts["DATABASE_URL required"]["status"] == "pass"
+    assert isinstance(body["fixes"], list)
 
-    assert contracts["JWT_SECRET required"]["status"] == "fail"
-    assert contracts["JWT_SECRET required"]["actual"] == "JWT_SECRET missing"
+    assert isinstance(body["trust_score"], float)
+    assert isinstance(body["trust_score_after"], float)
+
+    assert 0.0 <= body["trust_score"] <= 100.0
+    assert 0.0 <= body["trust_score_after"] <= 100.0
+
+    assert body["trust_score_after"] >= body["trust_score"]
+
+    assert "reverification" in body
+    assert "elapsed_seconds" in body
 
 
 def test_verify_local_sample_repo_persists_verified_contracts():
@@ -242,24 +256,34 @@ def test_verify_local_sample_repo_persists_verified_contracts():
 
     assert verify_response.status_code == 200
 
+    verified_contracts = verify_response.json()["contracts"]
+
     contracts_response = client.get("/contracts")
 
     assert contracts_response.status_code == 200
 
-    contracts = contracts_response.json()
+    persisted_contracts = contracts_response.json()
 
-    assert len(contracts) == 4
+    assert len(persisted_contracts) == len(verified_contracts)
 
-    assert {contract["id"] for contract in contracts} == {
-        "config-001",
-        "config-002",
-        "config-003",
-        "config-004",
+    assert {
+        contract["id"]
+        for contract in persisted_contracts
+    } == {
+        contract["id"]
+        for contract in verified_contracts
     }
 
-    assert "DP-001" not in {
-        contract["id"]
-        for contract in contracts
+    assert len(persisted_contracts) > 0
+
+    assert {
+        contract["area"]
+        for contract in persisted_contracts
+    } == {
+        "runtime_requirements",
+        "commands",
+        "config_env",
+        "api_docs",
     }
 
 

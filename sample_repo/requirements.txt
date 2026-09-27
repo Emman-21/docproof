@@ -1,0 +1,10 @@
+# Backend dependencies for the sample project.
+#
+# NOTE: This file intentionally pins a higher Python version than the README
+# claims (3.9+) to exercise DocProof's runtime mismatch detection.
+#
+# python_requires >= 3.11  ← contradicts README "Python 3.9+"
+
+fastapi>=0.100.0
+uvicorn[standard]>=0.23.0
+pydantic>=2.0.0

@@ -1,49 +1,57 @@
-# Widget Service
+# Sample Project
 
-A simple REST API for managing widgets.
+A demo application used by DocProof to exercise its real verification engine.
 
-## Requirements
+## Prerequisites
 
-- Node.js >= 16
-- npm
+Before running this project, make sure you have the following installed:
 
-## Installation
+- **Node.js 18+** — the minimum version required to run the frontend.
+- **npm 8+** — required to manage frontend dependencies.
+- **Python 3.9+** — required for the backend verification service.
+
+## Getting Started
+
+### Install dependencies
 
 ```bash
 npm install
+pip install -r requirements.txt
 ```
 
-## Usage
-
-Start the development server:
+### Run the development server
 
 ```bash
-npm run serve
+npm start
 ```
 
-Run tests:
+### Run the backend
 
 ```bash
-npm test
+python -m uvicorn main:app --reload
 ```
+
+## Runtime Requirements
+
+| Runtime  | Minimum Version |
+|----------|-----------------|
+| Node.js  | 18              |
+| npm      | 8               |
+| Python   | 3.9             |
 
 ## Environment Variables
 
-- `PORT` -- default is 3000
-- `DEBUG` defaults to false
-- `DATABASE_URL` is required. PostgreSQL connection string.
-- `JWT_SECRET` -- required. Token signing key.
+Copy `.env.example` to `.env` and fill in the values:
 
-## API
+- `DATABASE_URL` — required. Connection string for the database.
+- `API_KEY` — required. API key for external service.
 
-### GET /health
-Returns service health status.
+## Notes
 
-### GET /widgets
-Returns list of all widgets.
+This project is intentionally seeded with version mismatches between this README
+and the actual configuration files (`package.json`, `requirements.txt`) so that
+DocProof can detect and report those contradictions.
 
-### POST /widgets/create
-Creates a new widget.
-
-### DELETE /widgets/:id
-Deletes a widget by ID.
+- README claims **Node.js 18+** but `package.json` enforces `>=20.0.0`.
+- README claims **npm 8+** but `package.json` enforces `>=10.0.0`.
+- README claims **Python 3.9+** but `requirements.txt` pins `python_requires>=3.11`.

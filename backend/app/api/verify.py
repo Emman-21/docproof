@@ -6,21 +6,26 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
 from app.core.models import ProjectSelection
+from app.orchestration.pipeline import run as run_orchestration_pipeline
 from app.storage import repository
-from app.verification.verification_pipeline import run_config_verification
 
 
 router = APIRouter()
 
 
 @router.post("/verify")
-def trigger_verification(project: ProjectSelection) -> JSONResponse:
-    """Verify local repositories immediately.
+def trigger_verification(
+    project: ProjectSelection,
+) -> JSONResponse:
+    """Run DocProof verification for a local repository.
 
-    Remote or unavailable repositories keep the existing queued behavior
-    until repository fetching or cloning is implemented.
+    Local repositories are processed immediately through the full
+    DocProof orchestration pipeline.
+
+    Remote or unavailable repositories retain the queued behavior until
+    repository fetching or cloning is implemented.
     """
-    repository_path = Path(project.repository)
+    repository_path = Path(project.repository).resolve()
 
     if not repository_path.is_dir():
         return JSONResponse(
@@ -37,27 +42,31 @@ def trigger_verification(project: ProjectSelection) -> JSONResponse:
             detail="At least one documentation file is required",
         )
 
-    documentation_relative_path = project.documentation[0]
-    documentation_path = repository_path / documentation_relative_path
-    env_path = repository_path / ".env.example"
+    for documentation_file in project.documentation:
+        documentation_path = repository_path / documentation_file
 
-    if not documentation_path.is_file():
-        raise HTTPException(
-            status_code=404,
-            detail=f"Documentation file not found: {documentation_relative_path}",
-        )
+        if not documentation_path.is_file():
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    "Documentation file not found: "
+                    f"{documentation_file}"
+                ),
+            )
 
-    if not env_path.is_file():
-        raise HTTPException(
-            status_code=404,
-            detail=".env.example not found in repository",
-        )
+    backend_path: Path | None = repository_path / "backend"
 
-    result = run_config_verification(
-        documentation_path=documentation_relative_path,
-        documentation_content=documentation_path.read_text(encoding="utf-8"),
-        env_path=".env.example",
-        env_content=env_path.read_text(encoding="utf-8"),
+    if not backend_path.is_dir():
+        sibling_backend = repository_path.parent / "backend"
+
+        if sibling_backend.is_dir():
+            backend_path = sibling_backend
+        else:
+            backend_path = None
+
+    result = run_orchestration_pipeline(
+        repo_path=repository_path,
+        backend_path=backend_path,
     )
 
     repository.replace_contracts(result.contracts)
@@ -71,7 +80,14 @@ def trigger_verification(project: ProjectSelection) -> JSONResponse:
                 contract.model_dump()
                 for contract in result.contracts
             ],
+            "fixes": [
+                fix.model_dump()
+                for fix in result.fixes
+            ],
+            "reverification": result.reverification.model_dump(),
             "summary": result.summary.model_dump(),
             "trust_score": result.trust_score,
+            "trust_score_after": result.trust_score_after,
+            "elapsed_seconds": result.elapsed_seconds,
         },
     )

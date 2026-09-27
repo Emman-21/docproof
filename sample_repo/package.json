@@ -1,16 +1,20 @@
 {
-  "name": "widget-service",
+  "name": "sample-project",
   "version": "1.0.0",
-  "engines": {
-    "node": ">=20.0.0"
-  },
+  "description": "Sample project used by DocProof for runtime verification testing.",
   "scripts": {
-    "start": "node src/app.js",
-    "dev": "node --watch src/app.js",
-    "test": "node --test src/app.test.js",
-    "build": "echo 'no build step'"
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
   },
   "dependencies": {
-    "express": "^4.18.2"
+    "react": "^18.2.0"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0"
   }
 }
