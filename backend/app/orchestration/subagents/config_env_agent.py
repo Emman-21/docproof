@@ -26,8 +26,8 @@ run(repo_path: str | Path) -> list[DocumentationContract]
 """
 from __future__ import annotations
 
+import hashlib
 import re
-import uuid
 from pathlib import Path
 from typing import Optional
 
@@ -306,9 +306,10 @@ def run(repo_path: str | Path) -> list[DocumentationContract]:
         if key in doc_refs:
             # pass
             doc_source, _ = doc_refs[key]
+            _hash = hashlib.sha256(f"config_env|{doc_source}|`{key}` is documented".encode()).hexdigest()[:8].upper()
             contracts.append(
                 _build_contract(
-                    contract_id=f"CFG-{key[:8].upper()}-{uuid.uuid4().hex[:6].upper()}",
+                    contract_id=f"CFG-{_hash}",
                     key=key,
                     status="pass",
                     source=doc_source,
@@ -329,9 +330,10 @@ def run(repo_path: str | Path) -> list[DocumentationContract]:
         else:
             # warning — in .env.example but not in docs
             source_ref = env_example_rel
+            _hash = hashlib.sha256(f"config_env|{env_example_rel}|`{key}` is declared in .env.example but not documented".encode()).hexdigest()[:8].upper()
             contracts.append(
                 _build_contract(
-                    contract_id=f"CFG-{key[:8].upper()}-{uuid.uuid4().hex[:6].upper()}",
+                    contract_id=f"CFG-{_hash}",
                     key=key,
                     status="warning",
                     source=source_ref,
@@ -360,9 +362,10 @@ def run(repo_path: str | Path) -> list[DocumentationContract]:
         if key in declared_keys:
             continue  # already handled above
         src_source, src_line_no, snippet = src_refs[key]
+        _hash = hashlib.sha256(f"config_env|{src_source}|`{key}` is used in source code".encode()).hexdigest()[:8].upper()
         contracts.append(
             _build_contract(
-                contract_id=f"CFG-{key[:8].upper()}-{uuid.uuid4().hex[:6].upper()}",
+                contract_id=f"CFG-{_hash}",
                 key=key,
                 status="fail",
                 source=src_source,
