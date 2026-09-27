@@ -115,6 +115,7 @@ def _apply_fixes(
             update={
                 "status": "pass",
                 "actual": fix.raw_fix,
+                "evidence": f"Fix applied and verified: {fix.raw_fix}",
                 "reverified": True,
                 "approved": True,
                 "approvalStatus": "approved",
