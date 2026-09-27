@@ -112,3 +112,28 @@ class VerificationContext(BaseModel):
 
 class TrustScoreResponse(BaseModel):
     score: float
+
+
+# ---------------------------------------------------------------------------
+# History run model
+# ---------------------------------------------------------------------------
+
+class HistoryRunSummary(BaseModel):
+    total: int
+    passed: int
+    failed: int
+    warnings: int
+
+
+class HistoryRun(BaseModel):
+    """A single persisted verification or reverification run."""
+
+    id: str
+    date: str
+    repository: str
+    branch: str
+    runType: str
+    commit: str
+    trustScore: float
+    summary: HistoryRunSummary
+    current: bool

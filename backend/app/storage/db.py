@@ -19,15 +19,11 @@ from __future__ import annotations
 import copy
 from typing import Dict, List, Optional
 
-<<<<<<< HEAD
-from app.core.models import DocumentationContract, FixSuggestion
-=======
 from app.core.models import (
     DocumentationContract,
     FixSuggestion,
     VerificationContext,
 )
->>>>>>> 370c285035238c71b5cfd94c853a9733d25c697f
 
 # ---------------------------------------------------------------------------
 # Seed data (mirrors frontend/src/data/mockData.ts)
@@ -231,30 +227,6 @@ _SEED: List[DocumentationContract] = [
 # ---------------------------------------------------------------------------
 
 _contracts: Dict[str, DocumentationContract] = {}
-<<<<<<< HEAD
-_fixes: List[FixSuggestion] = []
-_trust_score_after: Optional[float] = None
-
-
-def reset() -> None:
-    """Restore the store to the original seed dataset."""
-    global _contracts, _fixes, _trust_score_after
-    _contracts = {c.id: c.model_copy(deep=True) for c in _SEED}
-    _fixes = []
-    _trust_score_after = None
-
-
-def reset_with(
-    contracts: List[DocumentationContract],
-    fixes: Optional[List[FixSuggestion]] = None,
-    trust_score_after: Optional[float] = None,
-) -> None:
-    """Replace the store with results from a real pipeline run."""
-    global _contracts, _fixes, _trust_score_after
-    _contracts = {c.id: c.model_copy(deep=True) for c in contracts}
-    _fixes = list(fixes) if fixes else []
-    _trust_score_after = trust_score_after
-=======
 _fixes: Dict[str, FixSuggestion] = {}
 _verification_context: VerificationContext | None = None
 
@@ -276,7 +248,6 @@ def reset() -> None:
     _verification_context = None
 
 
-
 def replace_contracts(contracts: List[DocumentationContract]) -> None:
     """Replace the runtime store with freshly verified contracts."""
     global _contracts
@@ -285,6 +256,7 @@ def replace_contracts(contracts: List[DocumentationContract]) -> None:
         contract.id: contract.model_copy(deep=True)
         for contract in contracts
     }
+
 
 def replace_fixes(
     fixes: List[FixSuggestion],
@@ -296,6 +268,23 @@ def replace_fixes(
         fix.contract_id: fix.model_copy(deep=True)
         for fix in fixes
     }
+
+
+def all_contracts() -> List[DocumentationContract]:
+    return list(_contracts.values())
+
+
+def get_contract(contract_id: str) -> DocumentationContract | None:
+    return _contracts.get(contract_id)
+
+
+def update_contract(contract_id: str, **fields) -> DocumentationContract | None:
+    contract = _contracts.get(contract_id)
+    if contract is None:
+        return None
+    updated = contract.model_copy(update=fields)
+    _contracts[contract_id] = updated
+    return updated
 
 
 def all_fixes() -> List[FixSuggestion]:
@@ -329,32 +318,6 @@ def get_verification_context() -> VerificationContext | None:
     return _verification_context.model_copy(
         deep=True
     )
->>>>>>> 370c285035238c71b5cfd94c853a9733d25c697f
-
-
-def all_contracts() -> List[DocumentationContract]:
-    return list(_contracts.values())
-
-
-def get_contract(contract_id: str) -> DocumentationContract | None:
-    return _contracts.get(contract_id)
-
-
-def update_contract(contract_id: str, **fields) -> DocumentationContract | None:
-    contract = _contracts.get(contract_id)
-    if contract is None:
-        return None
-    updated = contract.model_copy(update=fields)
-    _contracts[contract_id] = updated
-    return updated
-
-
-def all_fixes() -> List[FixSuggestion]:
-    return list(_fixes)
-
-
-def get_trust_score_after() -> Optional[float]:
-    return _trust_score_after
 
 
 # Seed on module import so the app is ready without an explicit startup call.
