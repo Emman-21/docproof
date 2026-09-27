@@ -17,11 +17,11 @@ run(repo_path: str | Path) -> list[DocumentationContract]
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import shutil
 import subprocess
-import uuid
 from pathlib import Path
 from typing import Optional
 
@@ -634,7 +634,10 @@ def run(repo_path: str | Path) -> list[DocumentationContract]:
             seen_commands.add(key)
 
             result = _validate_command(parsed.raw, repo)
-            contract_id = f"CMD-{uuid.uuid4().hex[:8].upper()}"
+            _hash = hashlib.sha256(
+                f"commands|{parsed.source_file}#L{parsed.line_no}|{parsed.raw}".encode()
+            ).hexdigest()[:8].upper()
+            contract_id = f"CMD-{_hash}"
 
             contracts.append(
                 _build_contract(

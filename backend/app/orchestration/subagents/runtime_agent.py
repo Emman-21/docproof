@@ -16,9 +16,9 @@ run(repo_path: str | Path) -> list[DocumentationContract]
 from __future__ import annotations
 
 import configparser
+import hashlib
 import json
 import re
-import uuid
 from pathlib import Path
 from typing import Optional
 
@@ -363,7 +363,10 @@ def run(repo_path: str | Path) -> list[DocumentationContract]:
                 if key == runtime_key
             )
 
-            contract_id = f"RT-{runtime_key.upper()}-{uuid.uuid4().hex[:6].upper()}"
+            _hash = hashlib.sha256(
+                f"runtime_requirements|{doc_file.relative_to(repo)}#L{line_no}|{claim_sentence}".encode()
+            ).hexdigest()[:8].upper()
+            contract_id = f"RT-{runtime_key.upper()}-{_hash}"
 
             contracts.append(
                 _build_contract(

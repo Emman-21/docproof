@@ -36,8 +36,8 @@ backend_path:
 """
 from __future__ import annotations
 
+import hashlib
 import re
-import uuid
 from pathlib import Path
 from typing import Optional
 
@@ -328,7 +328,10 @@ def run(
     for doc_ep in doc_endpoints:
         key = _endpoint_key(doc_ep.method, doc_ep.path)
         impl_ep = impl_by_key.get(key)
-        contract_id = f"API-{uuid.uuid4().hex[:8].upper()}"
+        _hash = hashlib.sha256(
+            f"api_docs|{doc_ep.source_file}#L{doc_ep.line_no}|{doc_ep.method} {doc_ep.path} is documented".encode()
+        ).hexdigest()[:8].upper()
+        contract_id = f"API-{_hash}"
 
         if impl_ep is not None:
             # pass — documented AND implemented
@@ -389,7 +392,10 @@ def run(
         if key in {_endpoint_key(d.method, d.path) for d in doc_endpoints}:
             continue
 
-        contract_id = f"API-{uuid.uuid4().hex[:8].upper()}"
+        _hash = hashlib.sha256(
+            f"api_docs|{impl_ep.source_file}#L{impl_ep.line_no}|{impl_ep.method} {impl_ep.path} is implemented but undocumented".encode()
+        ).hexdigest()[:8].upper()
+        contract_id = f"API-{_hash}"
         contracts.append(
             _build_contract(
                 contract_id=contract_id,
