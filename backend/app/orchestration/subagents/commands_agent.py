@@ -613,6 +613,12 @@ def run(repo_path: str | Path) -> list[DocumentationContract]:
           - "warning" — command cannot be fully evaluated statically
     """
     repo = Path(repo_path).resolve()
+
+    if not repo.is_dir():
+        raise ValueError(
+            f"commands_agent: repo_path {repo!r} is not a directory."
+        )
+
     doc_files = _find_doc_files(repo)
 
     seen_commands: set[str] = set()

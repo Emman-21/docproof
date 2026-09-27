@@ -6,16 +6,16 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/contracts': 'http://localhost:8000',
-      '/verify': 'http://localhost:8000',
-      '/approve': 'http://localhost:8000',
-      '/reject': 'http://localhost:8000',
-      '/reverify': 'http://localhost:8000',
-      '/fixes': 'http://localhost:8000',
-      '/trust-score': 'http://localhost:8000',
-      '/health': 'http://localhost:8000',
+      '/contracts': { target: 'http://localhost:8000', changeOrigin: true },
+      '/verify':    { target: 'http://localhost:8000', changeOrigin: true },
+      '/approve':   { target: 'http://localhost:8000', changeOrigin: true },
+      '/reject':    { target: 'http://localhost:8000', changeOrigin: true },
+      '/reverify':  { target: 'http://localhost:8000', changeOrigin: true },
+      '/fixes':     { target: 'http://localhost:8000', changeOrigin: true },
+      '/trust-score': { target: 'http://localhost:8000', changeOrigin: true },
+      '/health':    { target: 'http://localhost:8000', changeOrigin: true },
     },
-    // Pipeline can take 30-120 s — increase proxy timeout to 3 min
+    // POST /verify now returns immediately (async pipeline); keep HMR snappy
     hmr: { timeout: 5000 },
   },
 });

@@ -295,7 +295,9 @@ def run(
         Root of the repository containing documentation files.
     backend_path:
         Directory that holds the FastAPI application source.  When ``None``,
-        defaults to ``<repo_path>/../backend``.
+        the agent looks for a ``backend/`` sub-directory *inside* repo_path.
+        If that sub-directory does not exist the implementation scan is skipped
+        entirely — the agent will never walk directories outside repo_path.
 
     Returns
     -------
@@ -305,13 +307,28 @@ def run(
         (sorted by source file + line), then impl-only endpoints.
     """
     repo = Path(repo_path).resolve()
+
+    if not repo.is_dir():
+        raise ValueError(
+            f"api_docs_agent: repo_path {repo!r} is not a directory."
+        )
+
     if backend_path is None:
-        backend = (repo.parent / "backend").resolve()
+        # Only look inside the target repo — never outside it.
+        # Previously this defaulted to (repo.parent / "backend") which caused
+        # DocProof's own source tree to be scanned when running against an
+        # external repo. Now we only look for backend/ as a sub-directory of
+        # repo_path. If it doesn't exist the implementation scan is skipped.
+        candidate = repo / "backend"
+        backend: Optional[Path] = candidate if candidate.is_dir() else None
     else:
+        # Explicit backend_path is allowed to be outside repo_path (legitimate
+        # use-case: cross-reference docs in one repo against a FastAPI backend
+        # that lives in a separate directory / repo).
         backend = Path(backend_path).resolve()
 
     doc_endpoints = _scan_docs(repo)
-    impl_endpoints = _scan_impl(backend)
+    impl_endpoints = _scan_impl(backend) if backend is not None else []
 
     # Build a lookup: normalised key → ImplEndpoint
     impl_by_key: dict[tuple[str, str], _ImplEndpoint] = {

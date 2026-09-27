@@ -125,47 +125,46 @@ export function ContractsProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  // Fire POST /verify immediately when the user confirms a repository so the
+  // backend pipeline starts running in parallel with the progress animation.
   const startVerification = useCallback(() => {
     setVerificationMode('running');
-  }, []);
+    triggerVerification(project).catch(() => {
+      // If the trigger itself fails (network down, etc.) surface the error.
+      setVerificationMode('error');
+    });
+  }, [project]);
 
-  // Called by VerificationRunning once the progress animation finishes.
-  // Kicks off POST /verify, then polls GET /verify/status until complete,
-  // then fetches the fresh contracts from the backend.
+  // Called by VerificationRunning once the progress animation reaches 90%.
+  // By this point POST /verify has already been sent; we just start polling
+  // GET /verify/status until the backend reports complete or error.
   const finishVerification = useCallback(() => {
-    triggerVerification(project)
-      .then(() => {
-        // Poll every 2 s until backend reports complete or error
-        const poll = window.setInterval(() => {
-          getVerifyStatus()
-            .then(({ status, error, trust_score_after }) => {
-              if (status === 'complete') {
-                window.clearInterval(poll);
-                setTrustScoreAfter(trust_score_after);
-                return Promise.all([getContracts(), getFixes()]).then(([data, fixData]) => {
-                  setContracts(data);
-                  setFixes(fixData);
-                  setVerificationMode('complete');
-                  setLastVerifiedLabel('Just now');
-                  const run = createCurrentHistoryRun(data, project.branch || DEFAULT_BRANCH, 'api-verify', 'Just now');
-                  setHistory((current) => [run, ...current.map((item) => ({ ...item, current: false }))]);
-                });
-              }
-              if (status === 'error') {
-                window.clearInterval(poll);
-                setVerifyError(error || 'Verification failed.');
-                setVerificationMode('error');
-              }
-            })
-            .catch(() => {
-              window.clearInterval(poll);
-              setVerificationMode('error');
+    const poll = window.setInterval(() => {
+      getVerifyStatus()
+        .then(({ status, error, trust_score_after }) => {
+          if (status === 'complete') {
+            window.clearInterval(poll);
+            setTrustScoreAfter(trust_score_after);
+            return Promise.all([getContracts(), getFixes()]).then(([data, fixData]) => {
+              setContracts(data);
+              setFixes(fixData);
+              setVerificationMode('complete');
+              setLastVerifiedLabel('Just now');
+              const run = createCurrentHistoryRun(data, project.branch || DEFAULT_BRANCH, 'api-verify', 'Just now');
+              setHistory((current) => [run, ...current.map((item) => ({ ...item, current: false }))]);
             });
-        }, 2000);
-      })
-      .catch(() => {
-        setVerificationMode('error');
-      });
+          }
+          if (status === 'error') {
+            window.clearInterval(poll);
+            setVerifyError(error || 'Verification failed.');
+            setVerificationMode('error');
+          }
+        })
+        .catch(() => {
+          window.clearInterval(poll);
+          setVerificationMode('error');
+        });
+    }, 2000);
   }, [project]);
 
   const failVerification = useCallback(() => {

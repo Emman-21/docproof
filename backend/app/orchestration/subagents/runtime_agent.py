@@ -329,6 +329,12 @@ def run(repo_path: str | Path) -> list[DocumentationContract]:
         Contracts are deterministically ordered: doc file → line number.
     """
     repo = Path(repo_path).resolve()
+
+    if not repo.is_dir():
+        raise ValueError(
+            f"runtime_agent: repo_path {repo!r} is not a directory."
+        )
+
     pkg = _read_package_json(repo)
     doc_files = _find_doc_files(repo)
 

@@ -170,14 +170,26 @@ def _scan_docs(repo: Path) -> dict[str, tuple[str, int]]:
 # ---------------------------------------------------------------------------
 
 def _collect_source_files(repo: Path) -> list[Path]:
-    """Walk the repo and return all scannable source files."""
+    """Walk the repo and return all scannable source files.
+
+    Every file yielded is guaranteed to be inside *repo*.
+    """
     result: list[Path] = []
-    for path in repo.rglob("*"):
+    repo_resolved = repo.resolve()
+    for path in repo_resolved.rglob("*"):
         # Skip unwanted directories
         if any(part in _SKIP_DIRS for part in path.parts):
             continue
         if not path.is_file():
             continue
+        # Sanity guard: must be inside repo
+        try:
+            path.relative_to(repo_resolved)
+        except ValueError:
+            raise RuntimeError(
+                f"config_env_agent: discovered file {path!r} is outside "
+                f"repo boundary {repo_resolved!r}. This is a bug."
+            )
         suffix = path.suffix.lower()
         if suffix in _SOURCE_EXTENSIONS or suffix in _SHELL_EXTENSIONS:
             result.append(path)
@@ -288,6 +300,13 @@ def run(repo_path: str | Path) -> list[DocumentationContract]:
         All contracts are deterministically ordered by key name.
     """
     repo = Path(repo_path).resolve()
+
+    # Guard: the resolved path must be a real directory, not a path that could
+    # accidentally point to the DocProof project itself or another system path.
+    if not repo.is_dir():
+        raise ValueError(
+            f"config_env_agent: repo_path {repo!r} is not a directory."
+        )
 
     declared_keys = _parse_env_example(repo)   # key → default value
     doc_refs = _scan_docs(repo)                # key → (source_ref, line_no)

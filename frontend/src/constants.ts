@@ -2,7 +2,8 @@ import type { VerificationArea } from './types';
 
 export const APP_NAME = 'DocProof';
 export const APP_TAGLINE = 'Your code has tests. Your documentation should too.';
-export const DEMO_REPOSITORY = 'https://github.com/docproof/demo-project';
+// The backend resolves this sentinel to the bundled sample_repo directory.
+export const DEMO_REPOSITORY = 'sample_repo';
 export const DEFAULT_BRANCH = 'main';
 export const DEFAULT_DOCUMENTATION = ['README.md', 'docs/setup.md', 'docs/api.md'];
 export const AVAILABLE_DOCUMENTATION = ['README.md', 'docs/setup.md', 'docs/api.md', '.env.example'];

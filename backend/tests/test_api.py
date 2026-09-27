@@ -8,7 +8,6 @@ Implementation requirements this file encodes:
   - store.reset() must restore the full original seed dataset, not just clear it.
   - POST /approve/{id} and POST /reject/{id} return the updated DocumentationContract.
 """
-
 from pathlib import Path
 
 import pytest
