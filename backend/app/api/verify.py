@@ -70,6 +70,16 @@ def trigger_verification(
     )
 
     repository.replace_contracts(result.contracts)
+    repository.replace_fixes(result.fixes)
+
+    repository.set_verification_context(
+        repository_path=str(repository_path),
+        backend_path=(
+            str(backend_path)
+            if backend_path is not None
+            else None
+        ),
+    )
 
     return JSONResponse(
         status_code=200,

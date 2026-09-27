@@ -19,7 +19,11 @@ from __future__ import annotations
 import copy
 from typing import Dict, List
 
-from app.core.models import DocumentationContract
+from app.core.models import (
+    DocumentationContract,
+    FixSuggestion,
+    VerificationContext,
+)
 
 # ---------------------------------------------------------------------------
 # Seed data (mirrors frontend/src/data/mockData.ts)
@@ -223,6 +227,8 @@ _SEED: List[DocumentationContract] = [
 # ---------------------------------------------------------------------------
 
 _contracts: Dict[str, DocumentationContract] = {}
+_fixes: Dict[str, FixSuggestion] = {}
+_verification_context: VerificationContext | None = None
 
 
 def reset() -> None:
@@ -231,8 +237,15 @@ def reset() -> None:
     Called at application startup and by the test fixture before each test.
     Uses deep copies so mutations during a test never corrupt the seed.
     """
-    global _contracts
-    _contracts = {c.id: c.model_copy(deep=True) for c in _SEED}
+    global _contracts, _fixes, _verification_context
+
+    _contracts = {
+        c.id: c.model_copy(deep=True)
+        for c in _SEED
+    }
+
+    _fixes = {}
+    _verification_context = None
 
 
 
@@ -244,6 +257,51 @@ def replace_contracts(contracts: List[DocumentationContract]) -> None:
         contract.id: contract.model_copy(deep=True)
         for contract in contracts
     }
+
+def replace_fixes(
+    fixes: List[FixSuggestion],
+) -> None:
+    """Replace stored fix suggestions with results from the latest run."""
+    global _fixes
+
+    _fixes = {
+        fix.contract_id: fix.model_copy(deep=True)
+        for fix in fixes
+    }
+
+
+def all_fixes() -> List[FixSuggestion]:
+    """Return all fix suggestions from the latest verification run."""
+    return list(_fixes.values())
+
+
+def get_fix(
+    contract_id: str,
+) -> FixSuggestion | None:
+    """Return the fix suggestion associated with a contract."""
+    return _fixes.get(contract_id)
+
+
+def set_verification_context(
+    context: VerificationContext,
+) -> None:
+    """Store repository information needed for later reverification."""
+    global _verification_context
+
+    _verification_context = context.model_copy(
+        deep=True
+    )
+
+
+def get_verification_context() -> VerificationContext | None:
+    """Return context from the most recent local verification run."""
+    if _verification_context is None:
+        return None
+
+    return _verification_context.model_copy(
+        deep=True
+    )
+
 
 def all_contracts() -> List[DocumentationContract]:
     return list(_contracts.values())

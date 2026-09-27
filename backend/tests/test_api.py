@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.storage import db as store
+from app.storage import repository
 
 
 @pytest.fixture(autouse=True)
@@ -285,6 +286,56 @@ def test_verify_local_sample_repo_persists_verified_contracts():
         "config_env",
         "api_docs",
     }
+
+
+def test_verify_persists_generated_fixes():
+    sample_repo = Path(__file__).resolve().parents[2] / "sample_repo"
+
+    payload = {
+        "repository": str(sample_repo),
+        "branch": "main",
+        "documentation": ["README.md"],
+    }
+
+    response = client.post("/verify", json=payload)
+
+    assert response.status_code == 200
+
+    fixes = response.json()["fixes"]
+
+    assert len(fixes) > 0
+
+    for fix in fixes:
+        stored_fix = repository.get_fix(
+            fix["contract_id"]
+        )
+
+        assert stored_fix is not None
+        assert stored_fix.contract_id == fix["contract_id"]
+        assert stored_fix.target_file == fix["target_file"]
+
+
+def test_verify_persists_verification_context():
+    sample_repo = Path(__file__).resolve().parents[2] / "sample_repo"
+
+    payload = {
+        "repository": str(sample_repo),
+        "branch": "main",
+        "documentation": ["README.md"],
+    }
+
+    response = client.post("/verify", json=payload)
+
+    assert response.status_code == 200
+
+    context = repository.get_verification_context()
+
+    assert context is not None
+
+    assert (
+        Path(context.repository_path)
+        == sample_repo.resolve()
+    )
 
 
 # ---------------------------------------------------------------------------
