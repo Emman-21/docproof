@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from pathlib import Path
 
@@ -12,7 +12,7 @@ from app.fixes.approval_flow import (
 from app.orchestration.pipeline import (
     run as run_orchestration_pipeline,
 )
-from app.storage import repository
+from app.storage import history_db, repository
 from app.verification.trust_score import calculate_trust_score
 
 
@@ -224,6 +224,21 @@ def reverify_contract(contract_id: str) -> dict:
 
     repository.replace_fixes(
         fresh_result.fixes
+    )
+
+    history_branch = (
+        history_db.get_latest_branch(
+            str(repository_path)
+        )
+        or "main"
+    )
+
+    history_db.save_history_run(
+        repository=str(repository_path),
+        branch=history_branch,
+        run_type="reverify",
+        trust_score=trust_score_after,
+        summary=fresh_result.summary,
     )
 
     # ------------------------------------------------------------

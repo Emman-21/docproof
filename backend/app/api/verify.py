@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 
 from app.core.models import ProjectSelection
 from app.orchestration.pipeline import run as run_orchestration_pipeline
-from app.storage import repository
+from app.storage import history_db, repository
 
 
 router = APIRouter()
@@ -79,6 +79,14 @@ def trigger_verification(
             if backend_path is not None
             else None
         ),
+    )
+
+    history_db.save_history_run(
+        repository=str(repository_path),
+        branch=project.branch or "main",
+        run_type="verify",
+        trust_score=result.trust_score,
+        summary=result.summary,
     )
 
     return JSONResponse(

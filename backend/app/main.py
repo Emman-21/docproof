@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core import config
 from app.storage import db as store
-from app.api import contracts, verify, approve, reverify, trust_score
+from app.api import contracts, verify, approve, reverify, history, trust_score
 
 
 @asynccontextmanager
@@ -39,6 +39,7 @@ app.include_router(contracts.router)
 app.include_router(verify.router)
 app.include_router(approve.router)
 app.include_router(reverify.router)
+app.include_router(history.router)
 app.include_router(trust_score.router)
 
 
