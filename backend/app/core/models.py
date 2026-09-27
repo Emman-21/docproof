@@ -103,5 +103,12 @@ class ProjectSelection(BaseModel):
     documentation: List[str]
 
 
+class VerificationContext(BaseModel):
+    """Repository information retained for approval and reverification."""
+
+    repository_path: str
+    backend_path: Optional[str] = None
+
+
 class TrustScoreResponse(BaseModel):
     score: float
