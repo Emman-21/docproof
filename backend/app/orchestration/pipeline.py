@@ -71,6 +71,9 @@ class PipelineResult(BaseModel):
     trust_score:
         Documentation trust score (0.0–100.0) computed from the *initial*
         verification results.
+    trust_score_after:
+        Documentation trust score (0.0–100.0) computed from the *post-fix*
+        re-verification contracts.
     elapsed_seconds:
         Wall-clock time taken by the pipeline run (float, rounded to 3 dp).
     """
@@ -80,6 +83,7 @@ class PipelineResult(BaseModel):
     reverification: ReverificationResult
     summary: VerificationSummary
     trust_score: float
+    trust_score_after: float
     elapsed_seconds: float
 
 
@@ -185,6 +189,7 @@ def run(
     # ------------------------------------------------------------------
     summary = _build_summary(contracts)
     trust_score = calculate_trust_score(contracts)
+    trust_score_after = calculate_trust_score(reverification.contracts)
     elapsed = round(time.perf_counter() - t0, 3)
 
     return PipelineResult(
@@ -193,6 +198,7 @@ def run(
         reverification=reverification,
         summary=summary,
         trust_score=trust_score,
+        trust_score_after=trust_score_after,
         elapsed_seconds=elapsed,
     )
 
