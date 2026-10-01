@@ -16,12 +16,34 @@ DocProof verifies whether documentation claims still match repository evidence. 
 
 ## Run
 
+The frontend uses the FastAPI backend for contracts and verification. Start both
+services in separate terminals from the repository root.
+
+### Backend
+
+```powershell
+cd backend
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+On macOS/Linux, activate the environment with `source .venv/bin/activate`.
+The API should respond at `http://127.0.0.1:8000/health`.
+
+### Frontend
+
+In a second terminal from the repository root:
+
 ```bash
+cd frontend
 npm install
 npm run dev
 ```
 
-Vite normally opens at `http://localhost:5173`.
+Vite normally opens at `http://localhost:5173` and proxies API requests to the
+backend on port 8000.
 
 ## Checks
 
