@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import threading
+import shutil
+import subprocess
+import tempfile
 from pathlib import Path
 from typing import Literal, Optional
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
@@ -33,6 +37,71 @@ _SAMPLE_REPO_PATH = Path(__file__).resolve().parents[3] / "sample_repo"
 _DEMO_SENTINEL = "sample_repo"
 
 
+def _is_github_repository_url(value: str) -> bool:
+    parsed = urlsplit(value)
+    parts = parsed.path.strip("/").split("/")
+    return (
+        parsed.scheme == "https"
+        and parsed.hostname == "github.com"
+        and parsed.username is None
+        and parsed.password is None
+        and not parsed.query
+        and not parsed.fragment
+        and len(parts) == 2
+        and bool(parts[0])
+        and bool(parts[1].removesuffix(".git"))
+    )
+
+
+def _clone_github_repository(repository_url: str, branch: str) -> Path:
+    if not branch or branch.startswith("-"):
+        raise ValueError("Enter a valid Git branch name.")
+
+    branch_check = subprocess.run(
+        ["git", "check-ref-format", "--branch", branch],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=10,
+    )
+    if branch_check.returncode != 0:
+        raise ValueError(f"'{branch}' is not a valid Git branch name.")
+
+    clone_root = Path(tempfile.mkdtemp(prefix="docproof-"))
+    repository_path = clone_root / "repository"
+    try:
+        subprocess.run(
+            [
+                "git",
+                "clone",
+                "--depth",
+                "1",
+                "--single-branch",
+                "--branch",
+                branch,
+                "--",
+                repository_url,
+                str(repository_path),
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=180,
+        )
+    except FileNotFoundError as exc:
+        shutil.rmtree(clone_root, ignore_errors=True)
+        raise RuntimeError("Git is not installed on the verification server.") from exc
+    except subprocess.TimeoutExpired as exc:
+        shutil.rmtree(clone_root, ignore_errors=True)
+        raise RuntimeError("Cloning the repository timed out after 180 seconds.") from exc
+    except subprocess.CalledProcessError as exc:
+        shutil.rmtree(clone_root, ignore_errors=True)
+        detail = (exc.stderr or "").strip().splitlines()
+        raise RuntimeError(detail[-1] if detail else "Could not clone the GitHub repository.") from exc
+
+    return repository_path
+
+
 def _set_state(
     state: _VerifyState,
     error: str = "",
@@ -51,12 +120,22 @@ def _get_state() -> tuple[_VerifyState, str, Optional[float]]:
 
 
 def _run_pipeline_in_background(
-    repository_path: Path,
-    backend_path: Optional[Path],
     project: ProjectSelection,
+    repository_path: Optional[Path],
 ) -> None:
     """Execute the full orchestration pipeline in a background thread."""
     try:
+        if repository_path is None:
+            repository_path = _clone_github_repository(
+                project.repository,
+                project.branch,
+            )
+
+        backend_path: Optional[Path] = repository_path / "backend"
+        if not backend_path.is_dir():
+            sibling = repository_path.parent / "backend"
+            backend_path = sibling if sibling.is_dir() else None
+
         result = run_orchestration_pipeline(
             repo_path=repository_path,
             backend_path=backend_path,
@@ -86,11 +165,9 @@ def _run_pipeline_in_background(
 def trigger_verification(project: ProjectSelection) -> JSONResponse:
     """Start DocProof verification.
 
-    * ``sample_repo`` (the demo sentinel) → run the real pipeline against the
-      bundled sample repository immediately in a background thread.
-    * A resolvable local directory → same background-thread execution.
-    * Anything else (e.g. a GitHub URL) → queued (202) until clone support
-      is implemented.
+        * ``sample_repo`` (the demo sentinel) → run against the bundled sample.
+        * A local directory → run directly against that directory.
+        * A public HTTPS GitHub repository URL → shallow-clone the selected branch.
     """
     global _state
 
@@ -101,27 +178,29 @@ def trigger_verification(project: ProjectSelection) -> JSONResponse:
     else:
         repository_path = Path(repo_str).resolve()
 
-    # Remote / non-existent path — not yet supported.
-    if not repository_path.is_dir():
+    is_local_repository = repository_path.is_dir()
+    is_github_repository = _is_github_repository_url(repo_str)
+    if not is_local_repository and not is_github_repository:
         return JSONResponse(
-            status_code=202,
+            status_code=422,
             content={
-                "status": "verification_queued",
-                "repository": project.repository,
+                "detail": (
+                    "Use a local repository directory or a public HTTPS GitHub URL "
+                    "in the form https://github.com/owner/repository."
+                )
             },
         )
-
-    # Locate backend directory for API-docs agent.
-    backend_path: Optional[Path] = repository_path / "backend"
-    if not backend_path.is_dir():
-        sibling = repository_path.parent / "backend"
-        backend_path = sibling if sibling.is_dir() else None
+    if is_github_repository and not project.branch.strip():
+        return JSONResponse(
+            status_code=422,
+            content={"detail": "Enter a Git branch name."},
+        )
 
     _set_state("running")
 
     thread = threading.Thread(
         target=_run_pipeline_in_background,
-        args=(repository_path, backend_path, project),
+        args=(project, repository_path if is_local_repository else None),
         daemon=True,
     )
     thread.start()

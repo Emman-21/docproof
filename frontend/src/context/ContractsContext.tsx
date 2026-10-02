@@ -55,7 +55,7 @@ interface ContractsContextValue {
   areaScores: ReturnType<typeof computeAreaScores>;
   setProject: (project: ProjectSelection) => void;
   useDemoProject: () => void;
-  startVerification: () => void;
+  startVerification: (project?: ProjectSelection) => void;
   finishVerification: () => void;
   failVerification: () => void;
   approveContract: (contractId: string) => void;
@@ -127,10 +127,13 @@ export function ContractsProvider({ children }: { children: ReactNode }) {
 
   // Fire POST /verify immediately when the user confirms a repository so the
   // backend pipeline starts running in parallel with the progress animation.
-  const startVerification = useCallback(() => {
+  const startVerification = useCallback((selectedProject = project) => {
     setVerificationMode('running');
-    triggerVerification(project).catch(() => {
+    triggerVerification(selectedProject).catch((error: unknown) => {
       // If the trigger itself fails (network down, etc.) surface the error.
+      setVerifyError(
+        error instanceof Error ? error.message : 'Could not start verification.'
+      );
       setVerificationMode('error');
     });
   }, [project]);

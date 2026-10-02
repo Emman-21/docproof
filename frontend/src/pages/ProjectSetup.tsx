@@ -47,8 +47,13 @@ export default function ProjectSetup() {
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length) return;
 
-    setProject({ repository: repository.trim(), branch: branch.trim(), documentation });
-    startVerification();
+    const selectedProject = {
+      repository: repository.trim(),
+      branch: branch.trim(),
+      documentation,
+    };
+    setProject(selectedProject);
+    startVerification(selectedProject);
     navigate('/verify');
   }
 

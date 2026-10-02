@@ -12,6 +12,12 @@ async function request<T>(
   path: string,
   init?: RequestInit
 ): Promise<T> {
+  if (!API_BASE_URL && !import.meta.env.DEV) {
+    throw new Error(
+      'VITE_API_BASE_URL is missing. Configure it in the frontend deployment settings.'
+    );
+  }
+
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     headers: {
@@ -58,10 +64,16 @@ export async function getContract(
 export async function triggerVerification(
   project: ProjectSelection
 ): Promise<void> {
-  await request<void>('/verify', {
+  const result = await request<{ status?: string }>('/verify', {
     method: 'POST',
     body: JSON.stringify(project),
   });
+
+  if (result.status === 'verification_queued') {
+    throw new Error(
+      'The backend has not started this verification. Deploy the latest backend and try again.'
+    );
+  }
 }
 
 export async function approveFix(

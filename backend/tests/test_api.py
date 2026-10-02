@@ -159,7 +159,18 @@ def test_get_contract_not_found_returns_404():
 # POST /verify
 # ---------------------------------------------------------------------------
 
-def test_verify_valid_payload_returns_202():
+def test_verify_github_repository_returns_completed_results(monkeypatch):
+    sample_repo = Path(__file__).resolve().parents[2] / "sample_repo"
+    cloned: list[tuple[str, str]] = []
+
+    def clone_repository(repository_url: str, branch: str) -> Path:
+        cloned.append((repository_url, branch))
+        return sample_repo
+
+    monkeypatch.setattr(
+        "app.api.verify._clone_github_repository",
+        clone_repository,
+    )
     payload = {
         "repository": "https://github.com/example/repo",
         "branch": "main",
@@ -168,19 +179,22 @@ def test_verify_valid_payload_returns_202():
 
     r = client.post("/verify", json=payload)
 
-    assert r.status_code == 202
+    assert r.status_code == 200
+    assert r.json()["status"] == "completed"
+    assert cloned == [(payload["repository"], "main")]
 
 
-def test_verify_returns_queued_status():
+def test_verify_rejects_unsupported_repository_url():
     payload = {
-        "repository": "https://github.com/example/repo",
+        "repository": "https://example.com/team/repo",
         "branch": "main",
         "documentation": ["README.md"],
     }
 
     r = client.post("/verify", json=payload)
 
-    assert r.json()["status"] == "verification_queued"
+    assert r.status_code == 422
+    assert "public HTTPS GitHub URL" in r.json()["detail"]
 
 
 def test_verify_missing_body_returns_422():

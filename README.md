@@ -79,17 +79,27 @@ npm run build
 - `/trust-score` Documentation Trust Score
 - `/history` Verification History
 
-## Backend integration later
+## Deployment configuration
 
-The app currently runs entirely from frontend state and deterministic mock data.
-
-When the FastAPI backend is ready, configure:
+The Vercel frontend requires a separately deployed FastAPI backend. In the
+Vercel project's environment variables, set:
 
 ```bash
-VITE_API_BASE_URL=http://localhost:8000
+VITE_API_BASE_URL=https://<your-backend-domain>
 ```
 
-`src/api/client.ts` is already prepared for the planned endpoints:
+Set `CORS_ORIGINS` on the backend to a comma-separated list containing the
+frontend's exact Vercel domain, for example:
+
+```bash
+CORS_ORIGINS=http://localhost:5173,https://docproof-me5w.vercel.app
+```
+
+Redeploy the frontend after changing `VITE_API_BASE_URL`, since Vite embeds it
+at build time. The backend can verify public HTTPS GitHub repositories and
+branches; private repositories require authentication and are not supported.
+
+`src/api/client.ts` uses these backend endpoints:
 
 - `GET /contracts`
 - `GET /contracts/{id}`
