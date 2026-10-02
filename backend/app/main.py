@@ -1,4 +1,5 @@
 """DocProof FastAPI application entry point."""
+
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
@@ -9,7 +10,15 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core import config
 from app.storage import db as store
-from app.api import contracts, verify, approve, reverify, history, trust_score, fix
+from app.api import (
+    contracts,
+    verify,
+    approve,
+    reverify,
+    history,
+    trust_score,
+    fix,
+)
 
 
 @asynccontextmanager
@@ -19,18 +28,28 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
     yield
 
 
-app = FastAPI(title=config.APP_TITLE, version=config.APP_VERSION, lifespan=lifespan)
+app = FastAPI(
+    title=config.APP_TITLE,
+    version=config.APP_VERSION,
+    lifespan=lifespan,
+)
+
 
 # ---------------------------------------------------------------------------
-# CORS — allow the Vite frontend dev server (and any configured origins)
+# CORS
+# Allow requests from local Vite and deployed Vercel frontend
 # ---------------------------------------------------------------------------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=config.CORS_ORIGINS,
+    allow_origins=[
+        "http://localhost:5173",
+        "https://docproof-me5w.vercel.app",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 # ---------------------------------------------------------------------------
 # Routers
