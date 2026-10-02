@@ -6,13 +6,7 @@ import type {
 
 const API_BASE_URL = (
   import.meta.env.VITE_API_BASE_URL as string | undefined
-)?.trim();
-
-if (!API_BASE_URL) {
-  throw new Error(
-    'VITE_API_BASE_URL is not configured. Add it to your environment variables.'
-  );
-}
+)?.trim() ?? '';
 
 async function request<T>(
   path: string,
